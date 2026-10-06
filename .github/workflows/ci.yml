@@ -16,7 +16,7 @@ on:
 
 env:
   ZLUDA_VERSION: "ee2f25a"
-  VKD3D_SRC: "/home/runner/work/d4r/.cache/d4r-vkd3d-proton"
+  VKD3D_SRC: "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton"
 
 jobs:
   build-zluda:
@@ -68,16 +68,16 @@ jobs:
 
       - name: Install ZLUDA artifacts
         run: |
-          mkdir -p /home/runner/work/d4r/.cache/d4r-zluda-current
-          cp zluda/target/release/libnvcuda.so /home/runner/work/d4r/.cache/d4r-zluda-current/ || true
-          ln -sf libnvcuda.so /home/runner/work/d4r/.cache/d4r-zluda-current/libcuda.so 2>/dev/null || true
+          mkdir -p /home/runner/work/d4r/d4r/.cache/d4r-zluda-current
+          cp zluda/target/release/libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
+          ln -sf libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/libcuda.so 2>/dev/null || true
 
       - name: Upload ZLUDA artifacts
         uses: actions/upload-artifact@v4
         with:
           name: d4r-zluda-artifacts
           path: |
-            /home/runner/work/d4r/.cache/d4r-zluda-current/
+            /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/
             zluda/target/release/*.so
 
   build-vkd3d-proton:
@@ -107,7 +107,7 @@ jobs:
       - name: Apply vkd3d-proton patches
         working-directory: "${VKD3D_SRC}"
         run: |
-          PATCH_DIR="/home/runner/work/d4r/patches/vkd3d-proton"
+          PATCH_DIR="/home/runner/work/d4r/d4r/patches/vkd3d-proton"
           if [ -d "$PATCH_DIR" ]; then
             echo "Applying vkd3d-proton patches..."
             for patchfile in "$PATCH_DIR"/*.patch; do
