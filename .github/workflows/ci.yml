@@ -243,7 +243,7 @@ jobs:
             build/wine-nvcuda/*.dll 2>/dev/null || true
 
   package-local-build-kit:
-    if: |${{ github.ref == 'refs/heads/main' || inputs.build_kit_only == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' || inputs.build_kit_only == 'true' }}
     name: Package Local Build Kit
     runs-on: ubuntu-latest
     needs: [build-zluda, build-vkd3d-proton, build-nvngx-shim, build-wine-nvcuda-bridge]
