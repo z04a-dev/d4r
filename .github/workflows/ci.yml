@@ -1,10 +1,26 @@
 name: Kernel CI
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+    inputs:
+      build_all:
+        description: 'Build all components for local kit'
+        required: true
+        default: 'true'
+        type: choice
+        options:
+          - 'all' (ZLUDA, vkd3d-proton, shims)
+          - 'zluda-only'
+          - 'vkd3d-only'
+      target_branch:
+        description: 'Target branch for artifacts'
+        required: true
+        default: 'main'
+      build_kit_only:
+        description: 'Only package build kit, skip other builds'
+        required: false
+        default: 'false'
+        type: boolean
 
 env:
   ZLUDA_VERSION: "ee2f25a"
@@ -12,6 +28,7 @@ env:
 
 jobs:
   check-environment:
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     name: Check Environment
     runs-on: ubuntu-latest
     outputs:
@@ -43,6 +60,7 @@ jobs:
           fi
 
   build-zluda:
+    if: ${{ inputs.build_all == 'all' || inputs.build_all == 'zluda-only' }}
     name: Build ZLUDA Library (CPU-compatible)
     runs-on: ubuntu-latest
     needs: check-environment
@@ -110,6 +128,7 @@ jobs:
             zluda/target/release/*.so
 
   build-vkd3d-proton:
+    if: ${{ inputs.build_all == 'all' || inputs.build_all == 'vkd3d-only' }}
     name: Build vkd3d-proton (CPU-compatible)
     runs-on: ubuntu-latest
     needs: check-environment
@@ -158,6 +177,7 @@ jobs:
             vkd3d-proton/vkd3d12.dll
 
   build-nvngx-shim:
+    if: ${{ inputs.build_all == 'all' }}
     name: Build NVngx Shim (Windows target)
     runs-on: ubuntu-latest
     needs: check-environment
@@ -192,6 +212,7 @@ jobs:
             build/d4r_nvngx.dll 2>/dev/null || true
 
   build-wine-nvcuda-bridge:
+    if: ${{ inputs.build_all == 'all' }}
     name: Build Wine CUDA Bridge (Windows target)
     runs-on: ubuntu-latest
     needs: check-environment
@@ -222,6 +243,7 @@ jobs:
             build/wine-nvcuda/*.dll 2>/dev/null || true
 
   package-local-build-kit:
+    if: |${{ github.ref == 'refs/heads/main' || inputs.build_kit_only == 'true' }}
     name: Package Local Build Kit
     runs-on: ubuntu-latest
     needs: [build-zluda, build-vkd3d-proton, build-nvngx-shim, build-wine-nvcuda-bridge]
@@ -256,8 +278,8 @@ jobs:
   create-zip-package:
     name: Create ZIP Package
     runs-on: ubuntu-latest
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
     needs: package-local-build-kit
-    steps:
       - uses: actions/checkout@v4
 
       - name: Download build kit artifacts
