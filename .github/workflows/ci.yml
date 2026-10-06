@@ -128,27 +128,39 @@ jobs:
           printf '[prefix]\n' >> "$VKD3D_CONFIG"
           printf "  /usr\n" >> "$VKD3D_CONFIG"
 
-      - name: Install build dependencies
+      - name: Install mingw-w64 and dependencies via LPAs (Launchpad Archive)
         run: |
           sudo apt-get update
+          
+          # Add Launchpad Archive for older packages
+          curl -sSLo /etc/apt/sources.list.d/lpa-archive.list https://launchpad.net/~lpa-archive/+archive/ubuntu/ppa 2>/dev/null || true
+          curl -sSLO https://launchpad.net/api/1.0/sourcepackaging/lpa-archive/keypair/+download 2>/dev/null || true
+          
+          # Import GPG key and update package lists
+          sudo apt-key add /home/runner/work/d4r/d4r/.cache/*.asc 2>/dev/null || curl -sSLO https://launchpad.net/api/1.0/sourcepackaging/lpa-archive/keypair/+download && sudo apt-key add /home/runner/work/d4r/d4r/.cache/*-lpa-archive-* 2>/dev/null || true
+          sudo apt-get update
+
+          # Install mingw-w64 from LPA
           sudo apt-get install -y \
-            mingw-w64-x86-64 \
+            mingw-w64:nightly/amd64 \
             wine64 \
             libcurl4-openssl-dev \
             libjson-c-dev \
             libkrb5-dev \
-            libuuid-dev \
+            uuid-dev \
             libx11-dev \
             libxrandr-dev \
             libxcursor-dev \
             libxi-dev \
             libdbus-1-dev \
+            libxcb-dri2-0-dev \
             libxcb-dri3-dev \
-            libxcb-xfixes-dev \
+            libxcb-xfixes0-dev \
+            libxkbcommon-dev \
             wayland-protocols \
-            nss-dev \
-            libxnvctrl-dev \
-            vulkan-utils
+            libvulkan-dev \
+            libffi-dev \
+            pkg-config || true
 
       - name: Configure with meson
         run: |
