@@ -35,19 +35,14 @@ jobs:
           git lfs pull || true
 
       - name: Apply ZLUDA patches (required for d4r_emit)
-        working-directory: zluda
         run: |
-          for p in 0002 0003 0004 0005 0006 0007 0008; do
-            patch_dir="patches/zluda/$p"
-            if [ -d "$patch_dir" ]; then
-              echo "Applying ZLUDA patches from $patch_dir..."
-              for file in "$patch_dir"/*.patch; do
-                if [ -f "$file" ]; then
-                  git apply "$file" 2>&1 || echo "Patch skipped (already applied)"
-                fi
-              done
-            else
-              echo "No patches directory found: $patch_dir"
+          CD_ZLUDA_PATH="/home/runner/work/d4r/d4r"
+          PATCH_DIR="$CD_ZLUDA_PATH/patches/zluda"
+          cd "$CD_ZLUDA_PATH/zluda/patches"
+          for file in "$PATCH_DIR"/*.patch; do
+            if [ -f "$file" ]; then
+              echo "Applying patch: $file"
+              git apply "$file" 2>&1 || echo "Patch skipped or already applied: $file"
             fi
           done
 
@@ -100,19 +95,14 @@ jobs:
 
       - name: Apply vkd3d-proton patches
         run: |
-          PATCH_DIR="/home/runner/work/d4r/d4r/patches/vkd3d-proton"
-          cd "$SRC"
-          if [ -d "$PATCH_DIR" ]; then
-            echo "Applying vkd3d-proton patches..."
-            for patchfile in "$PATCH_DIR"/*.patch; do
-              if [ -f "$patchfile" ]; then
-                echo "Applying: $patchfile"
-                git apply "$patchfile" 2>&1 || echo "Patch skipped or already applied: $patchfile"
-              fi
-            done
-          else
-            echo "No patches directory found at $PATCH_DIR/"
-          fi
+          cd "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/patches"
+          PATCH_DIR="/home/zorah/gitclone/d4r/patches/vkd3d-proton"
+          for file in "$PATCH_DIR"/*.patch; do
+            if [ -f "$file" ]; then
+              echo "Applying patch: $file"
+              git apply "$file" 2>&1 || echo "Patch skipped or already applied: $file"
+            fi
+          done
 
       - name: Install mingw-w64 and build dependencies
         run: |
