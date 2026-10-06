@@ -14,10 +14,6 @@ on:
           - all (ZLUDA, vkd3d-proton)
           - zluda-only
 
-env:
-  ZLUDA_VERSION: "ee2f25a"
-  VKD3D_SRC: "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton"
-
 jobs:
   build-zluda:
     name: Build ZLUDA Library (CPU-compatible)
@@ -90,7 +86,7 @@ jobs:
 
       - name: Clone and setup vkd3d-proton (cached source)
         run: |
-          SRC="${VKD3D_SRC}"
+          SRC="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton"
           COMMIT="3dfc6f07"
           
           if [[ ! -d "$SRC/.git" ]]; then
@@ -105,8 +101,8 @@ jobs:
           git submodule update --init --recursive
 
       - name: Apply vkd3d-proton patches
-        working-directory: "${VKD3D_SRC}"
         run: |
+          cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton
           PATCH_DIR="/home/runner/work/d4r/d4r/patches/vkd3d-proton"
           if [ -d "$PATCH_DIR" ]; then
             echo "Applying vkd3d-proton patches..."
@@ -122,7 +118,7 @@ jobs:
 
       - name: Configure cross-compilation toolchain
         run: |
-          VKD3D_CONFIG="${VKD3D_SRC}/build-win64.txt"
+          VKD3D_CONFIG="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/build-win64.txt"
           printf '[binaries]\n' > "$VKD3D_CONFIG"
           printf "  ar = x86_64-w64-mingw32-ar\n" >> "$VKD3D_CONFIG"
           printf "  as = x86_64-w64-mingw32-as\n" >> "$VKD3D_CONFIG"
@@ -155,25 +151,24 @@ jobs:
             vulkan-utils
 
       - name: Configure with meson
-        working-directory: "${VKD3D_SRC}"
         run: |
+          cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton
           meson setup --cross-file build-win64.txt --buildtype release -Denable_tests=false builddir src
 
       - name: Build vkd3d-proton (mingw target)
-        working-directory: "${VKD3D_SRC}/builddir"
         run: |
+          cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir
           ninja -C builddir
 
       - name: Strip and copy DLLs to output
-        working-directory: "${VKD3D_SRC}"
         run: |
-          mkdir -p vkd3d-output
-          x86_64-w64-mingw32-strip -o "vkd3d-output/d3d12.dll" builddir/libs/d3d12/d3d12.dll 2>/dev/null || true
-          x86_64-w64-mingw32-strip -o "vkd3d-output/d3d12core.dll" builddir/libs/d3d12core/d3d12core.dll 2>/dev/null || true
+          mkdir -p /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output
+          x86_64-w64-mingw32-strip -o "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/d3d12.dll" /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir/libs/d3d12/d3d12.dll 2>/dev/null || true
+          x86_64-w64-mingw32-strip -o "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/d3d12core.dll" /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir/libs/d3d12core/d3d12core.dll 2>/dev/null || true
           
           # Also copy shim if it exists
-          if [ -f "${VKD3D_SRC}/builddir/bin/vkd3d-shim.dll" ]; then
-            cp "${VKD3D_SRC}/builddir/bin/vkd3d-shim.dll" "${VKD3D_SRC}/vkd3d-output/"
+          if [ -f "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir/bin/vkd3d-shim.dll" ]; then
+            cp "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir/bin/vkd3d-shim.dll" "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/"
           fi
 
       - name: Upload vkd3d-proton artifacts
@@ -181,7 +176,7 @@ jobs:
         with:
           name: d4r-vkd3d-artifacts
           path: |
-            ${VKD3D_SRC}/vkd3d-output/**
+            /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/**
 
   package-local-build-kit:
     name: Package Local Build Kit
