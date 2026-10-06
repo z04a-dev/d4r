@@ -322,7 +322,7 @@ jobs:
     name: Package Local Build Kit (emit + vkd3d-proton)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [build-emit-only, build-vkd3d-proton]
+    needs: [build-emit-only]
     if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'emit-only'
     steps:
       - uses: actions/checkout@v4
