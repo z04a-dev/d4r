@@ -95,8 +95,8 @@ jobs:
 
       - name: Apply vkd3d-proton patches
         run: |
-          cd "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/patches"
-          PATCH_DIR="/home/zorah/gitclone/d4r/patches/vkd3d-proton"
+          cd "$SRC"
+          PATCH_DIR="/home/runner/work/d4r/d4r/patches/vkd3d-proton"
           for file in "$PATCH_DIR"/*.patch; do
             if [ -f "$file" ]; then
               echo "Applying patch: $file"
