@@ -118,10 +118,9 @@ jobs:
             echo "No patches directory found at patches/vkd3d-proton/"
           fi
 
-      - name: Configure with cross-compilation (mingw-w64)
-        working-directory: $HOME/.cache/d4r-vkd3d-proton
+      - name: Configure cross-compilation toolchain
         run: |
-          mkdir -p build-win64.txt && cat > build-win64.txt << 'EOF'
+          cat > "$HOME/.cache/d4r-vkd3d-proton/build-win64.txt" << 'EOF'
 prefix = /usr
 binaries = {
   'ar' : 'x86_64-w64-mingw32-ar',
