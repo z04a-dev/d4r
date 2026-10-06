@@ -13,7 +13,9 @@ on:
         options:
           - all (ZLUDA, vkd3d-proton, shims)
           - zluda-only
-          - vkd3d-only
+
+env:
+  ZLUDA_VERSION: "ee2f25a"
 
 jobs:
   build-zluda:
@@ -87,9 +89,9 @@ jobs:
 
       - name: Clone vkd3d-proton
         run: |
-          git clone https://gitlab.freedesktop.org/mesa/vkd3d-proton vkd3d-proton
+          git clone https://github.com/HansKristian-Work/vkd3d-proton vkd3d-proton
           cd vkd3d-proton
-          git checkout $VKD3D_PROTON_VERSION
+          git checkout main
 
       - name: Build vkd3d-proton
         working-directory: vkd3d-proton
