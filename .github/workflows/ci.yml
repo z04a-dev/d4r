@@ -9,7 +9,6 @@ on:
         default: all
         type: choice
         options:
-          - all (ZLUDA + d4r_emit + vkd3d-proton)
           - emit-only (d4r_emit + vkd3d-proton, no full ZLUDA)
 
 env:
@@ -17,67 +16,8 @@ env:
 
 jobs:
   # =============================================================================
-  # JOB: build-zluda-full
-  # Description: Builds full ZLUDA with libnvcuda.so (only for 'all' mode)
-  # =============================================================================
-  build-zluda-full:
-    name: Build full ZLUDA (for 'all' mode only)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Clone ZLUDA
-        run: |
-          git clone https://github.com/vosen/ZLUDA zluda
-          cd zluda
-          git checkout ee2f25a
-          git submodule update --init --recursive
-          git lfs pull || true
-
-      - name: Apply ZLUDA patches
-        working-directory: zluda
-        run: |
-          for p in 0002 0003 0004 0005 0006 0007 0008; do
-            patch_dir="patches/zluda/$p"
-            if [ -d "$patch_dir" ]; then
-              echo "Applying ZLUDA patches from $patch_dir..."
-              for file in "$patch_dir"/*.patch; do
-                if [ -f "$file" ]; then
-                  git apply "$file" 2>&1 || echo "Patch skipped (already applied)"
-                fi
-              done
-            else
-              echo "No patches directory found: $patch_dir"
-            fi
-          done
-
-      - name: Build ZLUDA PTX helpers and full library
-        env:
-          CARGO_BUILD_JOBS: 8
-        run: |
-          cd zluda
-          cargo build --release -p ptx
-          cargo build --release -p ptx --example d4r_emit
-          cargo build --release -p zluda
-
-      - name: Install ZLUDA artifacts
-        run: |
-          mkdir -p /home/runner/work/d4r/d4r/.cache/d4r-zluda-current
-          cp zluda/target/release/libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
-          ln -sf libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/libcuda.so 2>/dev/null || true
-          cp zluda/target/release/d4r_emit /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
-
-      - name: Upload ZLUDA artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: d4r-zluda-artifacts
-          path: |
-            /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/
-
-  # =============================================================================
   # JOB: build-emit-only
-  # Description: Builds only d4r_emit (only for 'emit-only' mode)
+  # Description: Builds only d4r_emit (fast mode)
   # =============================================================================
   build-emit-only:
     name: Build d4r_emit only (fast, for 'emit-only' mode)
@@ -130,133 +70,6 @@ jobs:
           name: d4r-zluda-artifacts
           path: |
             /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/
-
-  # =============================================================================
-  # JOB: build-vkd3d-proton-all
-  # Description: Builds vkd3d-proton for 'all' mode (includes full ZLUDA artifacts)
-  # =============================================================================
-  build-vkd3d-proton-all:
-    name: Build vkd3d-proton (for 'all' mode)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Clone and setup vkd3d-proton (cached source)
-        run: |
-          SRC="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton"
-          COMMIT="3dfc6f07"
-          
-          if [[ ! -d "$SRC/.git" ]]; then
-            echo "Cloning vkd3d-proton..."
-            git clone https://github.com/HansKristian-Work/vkd3d-proton.git "$SRC"
-          else
-            echo "Using cached vkd3d-proton source"
-          fi
-          
-          cd "$SRC"
-          git checkout -f -B d4r-split "$COMMIT" 2>/dev/null || git checkout "$COMMIT" 2>/dev/null || true
-          git submodule update --init --recursive
-
-      - name: Apply vkd3d-proton patches
-        run: |
-          PATCH_DIR="/home/runner/work/d4r/d4r/patches/vkd3d-proton"
-          cd "$SRC"
-          if [ -d "$PATCH_DIR" ]; then
-            echo "Applying vkd3d-proton patches..."
-            for patchfile in "$PATCH_DIR"/*.patch; do
-              if [ -f "$patchfile" ]; then
-                echo "Applying: $patchfile"
-                git apply "$patchfile" 2>&1 || echo "Patch skipped or already applied: $patchfile"
-              fi
-            done
-          else
-            echo "No patches directory found at $PATCH_DIR/"
-          fi
-
-      - name: Install mingw-w64 and build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            mingw-w64 \
-            mingw-w64-tools \
-            meson \
-            ninja-build \
-            libcurl4-openssl-dev \
-            libjson-c-dev \
-            libkrb5-dev \
-            uuid-dev \
-            libx11-dev \
-            glslang-dev \
-            glslang-tools \
-            libxrandr-dev \
-            libxcursor-dev \
-            libxi-dev \
-            libdbus-1-dev \
-            libxcb-dri2-0-dev \
-            libxcb-dri3-dev \
-            libxcb-xfixes0-dev \
-            libxkbcommon-dev \
-            wayland-protocols \
-            libvulkan-dev \
-            libffi-dev \
-            pkg-config
-
-      - name: Configure cross-compilation toolchain
-        run: |
-          VKD3D_SRC="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton"
-          printf '%s\n' \
-            '[binaries]' \
-            "c = 'x86_64-w64-mingw32-gcc'" \
-            "cpp = 'x86_64-w64-mingw32-g++'" \
-            'ar = '"'"'x86_64-w64-mingw32-ar'"'"'' \
-            "strip = 'x86_64-w64-mingw32-strip'" \
-            "widl-mingw-tools-fallback = 'x86_64-w64-mingw32-widl'" \
-            '' \
-            '[properties]' \
-            "needs_exe_wrapper = true" \
-            '' \
-            '[host_machine]' \
-            "system = 'windows'" \
-            "cpu_family = 'x86_64'" \
-            'cpu = '"'"'x86_64'"'"'' \
-            "endian = 'little'" \
-            > "$VKD3D_SRC/build-win64.txt"
-
-      - name: Configure with meson
-        run: |
-          cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton
-          meson setup builddir . --cross-file build-win64.txt --buildtype release -Denable_tests=false
-
-      - name: Build vkd3d-proton (mingw target)
-        run: |
-          cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir
-          ninja -j"$(nproc)"
-
-      - name: Copy DLLs to output
-        run: |
-          VKD3D_BUILD="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir"
-          OUTPUT_DIR="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output"
-          
-          mkdir -p "$OUTPUT_DIR"
-          
-          # Find all .dll files and copy them
-          if [ -d "$VKD3D_BUILD/libs" ]; then
-            echo "Found DLLs in $VKD3D_BUILD/libs:"
-            find "$VKD3D_BUILD/libs" -name '*.dll' 2>/dev/null | while read f; do
-              echo "  $f"
-              cp "$f" "$OUTPUT_DIR/" || true
-            done
-          else
-            echo "No libs directory found in build tree"
-          fi
-
-      - name: Upload vkd3d-proton artifacts (all mode)
-        uses: actions/upload-artifact@v4
-        with:
-          name: d4r-vkd3d-artifacts
-          path: |
-            /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/*.dll
 
   # =============================================================================
   # JOB: build-vkd3d-proton-emit-only
@@ -384,43 +197,6 @@ jobs:
           name: d4r-vkd3d-artifacts
           path: |
             /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/*.dll
-
-  # =============================================================================
-  # JOB: package-local-build-kit-all
-  # Description: Packages all components (only for 'all' mode)
-  # Depends on: build-zluda-full, build-vkd3d-proton-all
-  # =============================================================================
-  package-local-build-kit-all:
-    name: Package Local Build Kit (all components)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
-    needs: [build-zluda-full, build-vkd3d-proton-all]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download ZLUDA artifacts (libnvcuda.so + d4r_emit)
-        uses: actions/download-artifact@v4
-        with:
-          name: d4r-zluda-artifacts
-          path: d4r-build-kit/zluda
-
-      - name: Download vkd3d-proton artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: d4r-vkd3d-artifacts
-          path: d4r-build-kit/vkd3d-proton
-
-      - name: Create ZIP package
-        run: |
-          cd /home/runner/work/d4r/d4r/.cache
-          zip -r ../d4r-local-build-kit.zip d4r-zluda-current/ vkd3d-proton/
-
-      - name: Upload build kit package
-        uses: actions/upload-artifact@v4
-        with:
-          name: d4r-local-build-kit.zip
-          path: |
-            .github/d4r-local-build-kit.zip
 
   # =============================================================================
   # JOB: package-local-build-kit-emit-only
