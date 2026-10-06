@@ -177,14 +177,20 @@ jobs:
 
       - name: Copy DLLs to output
         run: |
-          mkdir -p /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output
+          VKD3D_BUILD="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir"
+          OUTPUT_DIR="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output"
           
-          if [ -f "builddir/libs/d3d12/d3d12.dll" ]; then
-            cp builddir/libs/d3d12/d3d12.dll "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/"
-          fi
+          mkdir -p "$OUTPUT_DIR"
           
-          if [ -f "builddir/libs/d3d12core/d3d12core.dll" ]; then
-            cp builddir/libs/d3d12core/d3d12core.dll "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/"
+          # Find all .dll files and copy them
+          if [ -d "$VKD3D_BUILD/libs" ]; then
+            echo "Found DLLs in $VKD3D_BUILD/libs:"
+            find "$VKD3D_BUILD/libs" -name '*.dll' 2>/dev/null | while read f; do
+              echo "  $f"
+              cp "$f" "$OUTPUT_DIR/" || true
+            done
+          else
+            echo "No libs directory found in build tree"
           fi
 
       - name: Upload vkd3d-proton artifacts
@@ -192,7 +198,7 @@ jobs:
         with:
           name: d4r-vkd3d-artifacts
           path: |
-            /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/**
+            /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/*.dll
 
   package-local-build-kit:
     name: Package Local Build Kit
