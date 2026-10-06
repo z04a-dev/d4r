@@ -1,6 +1,8 @@
 name: Kernel CI
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       build_all:
@@ -15,10 +17,10 @@ on:
 
 jobs:
   build-zluda:
-    if: ${{ inputs.build_all == 'all' || inputs.build_all == 'zluda-only' }}
     name: Build ZLUDA Library (CPU-compatible)
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    if: github.event_name == 'workflow_dispatch' || inputs.build_all == 'all' || inputs.build_all == 'zluda-only'
     steps:
       - uses: actions/checkout@v4
 
@@ -76,10 +78,10 @@ jobs:
             zluda/target/release/*.so
 
   build-vkd3d-proton:
-    if: ${{ inputs.build_all == 'all' || inputs.build_all == 'vkd3d-only' }}
     name: Build vkd3d-proton (CPU-compatible)
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    if: github.event_name == 'workflow_dispatch' || inputs.build_all == 'all' || inputs.build_all == 'vkd3d-only'
     steps:
       - uses: actions/checkout@v4
 
@@ -116,10 +118,10 @@ jobs:
             vkd3d-proton/vkd3d12.dll
 
   build-nvngx-shim:
-    if: ${{ inputs.build_all == 'all' }}
     name: Build NVngx Shim (Windows target)
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    if: github.event_name == 'workflow_dispatch' && inputs.build_all == 'all'
     steps:
       - uses: actions/checkout@v4
 
@@ -150,11 +152,11 @@ jobs:
             build/d4r_nvngx.dll 2>/dev/null || true
 
   package-local-build-kit:
-    if: ${{ github.ref == 'refs/heads/main' || inputs.build_all != 'none' }}
     name: Package Local Build Kit
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [build-zluda, build-vkd3d-proton, build-nvngx-shim]
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
