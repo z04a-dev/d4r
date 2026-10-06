@@ -15,11 +15,11 @@ on:
           - emit-only (d4r_emit + vkd3d-proton, no full ZLUDA)
 
 jobs:
-  build-zluda-components:
-    name: Build ZLUDA and d4r_emit components
+  build-zluda-full:
+    name: Build full ZLUDA (for 'all' mode only)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'workflow_dispatch' || inputs.build_type != 'emit-only'
+    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'all'
     steps:
       - uses: actions/checkout@v4
 
@@ -31,7 +31,7 @@ jobs:
           git submodule update --init --recursive
           git lfs pull || true
 
-      - name: Apply ZLUDA patches (CPU-compatible parts)
+      - name: Apply ZLUDA patches
         working-directory: zluda
         run: |
           for p in 0002 0003 0004 0005 0006 0007 0008; do
@@ -48,33 +48,21 @@ jobs:
             fi
           done
 
-      - name: Build ZLUDA PTX helpers
+      - name: Build ZLUDA PTX helpers and full library
         env:
           CARGO_BUILD_JOBS: 8
         run: |
           cd zluda
           cargo build --release -p ptx
-
-      - name: Build full ZLUDA (only for 'all' mode)
-        if: inputs.build_type == 'all' || github.event_name == 'workflow_dispatch'
-        env:
-          CARGO_BUILD_JOBS: 8
-        run: |
-          cd zluda
+          cargo build --release -p ptx --example d4r_emit
           cargo build --release -p zluda
 
-      - name: Build and install d4r_emit (for offline PTX compilation)
-        run: |
-          cd zluda
-          cargo build --release -p ptx --example d4r_emit
-          cp target/release/d4r_emit /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
-
-      - name: Install ZLUDA artifacts (only for 'all' mode)
-        if: inputs.build_type == 'all' || github.event_name == 'workflow_dispatch'
+      - name: Install ZLUDA artifacts
         run: |
           mkdir -p /home/runner/work/d4r/d4r/.cache/d4r-zluda-current
           cp zluda/target/release/libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
           ln -sf libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/libcuda.so 2>/dev/null || true
+          cp zluda/target/release/d4r_emit /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
 
       - name: Upload ZLUDA artifacts
         uses: actions/upload-artifact@v4
@@ -83,11 +71,11 @@ jobs:
           path: |
             /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/
 
-  build-emit-only-components:
-    name: Build d4r_emit only (fast, no full ZLUDA)
+  build-emit-only:
+    name: Build d4r_emit only (fast, for 'emit-only' mode)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch' || inputs.build_type == 'emit-only'
+    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'emit-only'
     steps:
       - uses: actions/checkout@v4
 
@@ -116,7 +104,7 @@ jobs:
             fi
           done
 
-      - name: Build ZLUDA PTX helpers and d4r_emit only
+      - name: Build PTX helpers and d4r_emit only
         env:
           CARGO_BUILD_JOBS: 8
         run: |
@@ -140,7 +128,7 @@ jobs:
     name: Build vkd3d-proton (cross-compiled DLLs)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'workflow_dispatch' || inputs.build_type != 'zluda-only'
+    if: github.event_name == 'workflow_dispatch' && inputs.build_type != 'zluda-only'
     steps:
       - uses: actions/checkout@v4
 
@@ -264,7 +252,7 @@ jobs:
     name: Package Local Build Kit (all components)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [build-zluda-components, build-emit-only-components, build-vkd3d-proton]
+    needs: [build-zluda-full, build-emit-only, build-vkd3d-proton]
     if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'all'
     steps:
       - uses: actions/checkout@v4
@@ -297,7 +285,7 @@ jobs:
     name: Package Local Build Kit (emit + vkd3d-proton only)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [build-zluda-components, build-emit-only-components]
+    needs: [build-emit-only, build-vkd3d-proton]
     if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'emit-only'
     steps:
       - uses: actions/checkout@v4
