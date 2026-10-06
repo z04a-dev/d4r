@@ -176,31 +176,6 @@ jobs:
           name: d4r-shim-artifacts
           path: d4r-build-kit/shim 2>/dev/null || true
 
-      - name: Organize build kit structure
-        run: |
-          echo "Building local kit structure..."
-          # Create README for instructions
-          cat > d4r-build-kit/README.txt << 'EOF'
-D4R Local Build Kit
-===================
-This package contains CPU-compilable components for building D4R kernels
-on your AMD ROCm system.
-
-Contents:
-- zluda/: ZLUDA library stub and PTX helpers
-- vkd3d-proton/: Vulkan-based Direct3D 12 implementation (Proton compatible)
-- shim/: Windows-target shims for integration
-
-After transferring to your ROCm PC:
-1. Copy contents to /opt/d4r/ or similar location
-2. Build ZLUDA device helper with ROCm support:
-   cd zluda && cargo build --release -p nvcuda-helper
-3. Follow docs/building.md for full installation
-
-Note: This kit only contains CPU-compilable components.
-GPU-dependent compilation (ROCm HIP helpers) must be done locally.
-EOF
-
       - name: Upload build kit package
         uses: actions/upload-artifact@v4
         with:
