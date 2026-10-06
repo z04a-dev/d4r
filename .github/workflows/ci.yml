@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       build_all:
-        description: 'Build all components for local kit'
+        description: Build all components for local kit
         required: true
-        default: 'true'
+        default: all
         type: choice
         options:
-          - 'all' (ZLUDA, vkd3d-proton, shims)
-          - 'zluda-only'
-          - 'vkd3d-only'
+          - all (ZLUDA, vkd3d-proton, shims)
+          - zluda-only
+          - vkd3d-only
       target_branch:
         description: 'Target branch for artifacts'
         required: true
@@ -275,11 +275,19 @@ jobs:
           # Copy shim artifacts
           cp -f build/d4r_nvngx.dll d4r-build-kit/shim/ 2>/dev/null || true
 
+      - name: Upload build kit package
+        uses: actions/upload-artifact@v4
+        with:
+          name: d4r-local-build-kit
+          path: d4r-build-kit/
+          if-no-files-found: skip
+
   create-zip-package:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
     name: Create ZIP Package
     runs-on: ubuntu-latest
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
     needs: package-local-build-kit
+    steps:
       - uses: actions/checkout@v4
 
       - name: Download build kit artifacts
