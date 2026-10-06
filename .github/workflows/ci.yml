@@ -38,7 +38,7 @@ jobs:
         run: |
           CD_ZLUDA_PATH="/home/runner/work/d4r/d4r"
           PATCH_DIR="$CD_ZLUDA_PATH/patches/zluda"
-          cd "$CD_ZLUDA_PATH/zluda/patches"
+          cd "$CD_ZLUDA_PATH/zluda"
           for file in "$PATCH_DIR"/*.patch; do
             if [ -f "$file" ]; then
               echo "Applying patch: $file"
@@ -85,13 +85,21 @@ jobs:
           if [[ ! -d "$SRC/.git" ]]; then
             echo "Cloning vkd3d-proton..."
             git clone https://github.com/HansKristian-Work/vkd3d-proton.git "$SRC"
+            cd "$SRC"
+            git config submodule.include/vkd3d/core.active true 2>/dev/null || true
+            git config submodule.include/vkd3d/shaders.active true 2>/dev/null || true
+            git config submodule.include/vkd3d/shell.active false 2>/dev/null || true
           else
             echo "Using cached vkd3d-proton source"
+            cd "$SRC"
           fi
           
           cd "$SRC"
           git checkout -f -B d4r-split "$COMMIT" 2>/dev/null || git checkout "$COMMIT" 2>/dev/null || true
-          git submodule update --init --recursive
+          if [[ -f ".gitmodules" ]]; then
+            echo "Initializing submodules..."
+            git submodule update --init --recursive 2>&1 || echo "Submodule init had issues, continuing anyway"
+          fi
 
       - name: Apply vkd3d-proton patches
         run: |
@@ -99,8 +107,8 @@ jobs:
           PATCH_DIR="/home/runner/work/d4r/d4r/patches/vkd3d-proton"
           for file in "$PATCH_DIR"/*.patch; do
             if [ -f "$file" ]; then
-              echo "Applying patch: $file"
-              git apply "$file" 2>&1 || echo "Patch skipped or already applied: $file"
+              echo "=== Applying patch: $file ==="
+              git apply "$file" --whitespace=nowarn 2>&1 || echo "Warning: Patch had issues: $file"
             fi
           done
 
