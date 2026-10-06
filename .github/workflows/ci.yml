@@ -129,13 +129,14 @@ jobs:
             libkrb5-dev \
             uuid-dev \
             libx11-dev \
+            glslang-dev \
+            glslang-tools \
             libxrandr-dev \
             libxcursor-dev \
             libxi-dev \
             libdbus-1-dev \
             libxcb-dri2-0-dev \
             libxcb-dri3-dev \
-            libglslang-dev \
             libxcb-xfixes0-dev \
             libxkbcommon-dev \
             wayland-protocols \
