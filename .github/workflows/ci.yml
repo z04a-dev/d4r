@@ -116,11 +116,12 @@ jobs:
             echo "No patches directory found at $PATCH_DIR/"
           fi
 
-      - name: Install build dependencies
+      - name: Install mingw-w64 and build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             mingw-w64 \
+            mingw-w64-tools \
             meson \
             ninja-build \
             libcurl4-openssl-dev \
@@ -143,24 +144,29 @@ jobs:
 
       - name: Configure cross-compilation toolchain
         run: |
-          VKD3D_CONFIG="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/build-win64.txt"
-          printf '[binaries]\n' > "$VKD3D_CONFIG"
-          printf '  c = '"'"'x86_64-w64-mingw32-gcc'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  cpp = '"'"'x86_64-w64-mingw32-g++'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  ar = '"'"'x86_64-w64-mingw32-ar'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  strip = '"'"'x86_64-w64-mingw32-strip'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '[properties]\n' >> "$VKD3D_CONFIG"
-          printf '  needs_exe_wrapper = true\n' >> "$VKD3D_CONFIG"
-          printf '[host_machine]\n' >> "$VKD3D_CONFIG"
-          printf '  system = '"'"'windows'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  cpu_family = '"'"'x86_64'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  cpu = '"'"'x86_64'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  endian = '"'"'little'"'"'\n' >> "$VKD3D_CONFIG"
+          VKD3D_SRC="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton"
+          printf '%s\n' \
+            '[binaries]' \
+            "c = 'x86_64-w64-mingw32-gcc'" \
+            "cpp = 'x86_64-w64-mingw32-g++'" \
+            'ar = '"'"'x86_64-w64-mingw32-ar'"'"'' \
+            "strip = 'x86_64-w64-mingw32-strip'" \
+            "widl-mingw-tools-fallback = 'x86_64-w64-mingw32-widl'" \
+            '' \
+            '[properties]' \
+            "needs_exe_wrapper = true" \
+            '' \
+            '[host_machine]' \
+            "system = 'windows'" \
+            "cpu_family = 'x86_64'" \
+            'cpu = '"'"'x86_64'"'"'' \
+            "endian = 'little'" \
+            > "$VKD3D_SRC/build-win64.txt"
 
       - name: Configure with meson
         run: |
           cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton
-          meson setup builddir . --cross-file "$VKD3D_CONFIG" --buildtype release -Denable_tests=false
+          meson setup builddir . --cross-file build-win64.txt --buildtype release -Denable_tests=false
 
       - name: Build vkd3d-proton (mingw target)
         run: |
@@ -210,7 +216,7 @@ jobs:
       - name: Create ZIP package
         run: |
           cd /home/runner/work/d4r/d4r/.cache
-          zip -r ../d4r-local-build-kit.zip d4r-zluda-current/
+          zip -r ../d4r-local-build-kit.zip d4r-zluda-current/ vkd3d-proton/
 
       - name: Upload build kit package
         uses: actions/upload-artifact@v4
