@@ -12,58 +12,12 @@ on:
           - all (ZLUDA, vkd3d-proton, shims)
           - zluda-only
           - vkd3d-only
-      target_branch:
-        description: 'Target branch for artifacts'
-        required: true
-        default: 'main'
-      build_kit_only:
-        description: 'Only package build kit, skip other builds'
-        required: false
-        default: 'false'
-        type: boolean
-
-env:
-  ZLUDA_VERSION: "ee2f25a"
-  VKD3D_PROTON_VERSION: "3dfc6f07"
 
 jobs:
-  check-environment:
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
-    name: Check Environment
-    runs-on: ubuntu-latest
-    outputs:
-      has-nvidia-files: ${{ steps.check_nvidia.outputs.has_nvidia }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install base dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git wget curl build-essential \
-            mingw-w64-x86-64 \
-            cmake ninja-build pkg-config libgl1-mesa-dev
-
-      - name: Install Rust toolchain
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: stable
-          target: x86_64-pc-windows-gnu
-
-      - name: Check for NVIDIA files (for later packaging)
-        id: check_nvidia
-        run: |
-          if [ -f _nvngx.dll ] && [ -f nvngx_dlss.dll ]; then
-            echo "has_nvidia=true" >> $GITHUB_OUTPUT
-          else
-            echo "has_nvidia=false" >> $GITHUB_OUTPUT
-          fi
-
   build-zluda:
     if: ${{ inputs.build_all == 'all' || inputs.build_all == 'zluda-only' }}
     name: Build ZLUDA Library (CPU-compatible)
     runs-on: ubuntu-latest
-    needs: check-environment
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +26,7 @@ jobs:
         run: |
           git clone https://github.com/vosen/ZLUDA zluda
           cd zluda
-          git checkout ${{ env.ZLUDA_VERSION }}
+          git checkout $ZLUDA_VERSION
           git submodule update --init --recursive
           git lfs pull || true
 
@@ -95,23 +49,17 @@ jobs:
 
       - name: Build ZLUDA PTX helpers
         env:
-          ZLUDA_SOURCE_ROOT: ${{ github.workspace }}/zluda
           CARGO_BUILD_JOBS: 8
         run: |
           cd zluda
-          echo "Building PTX helper bitcode (CPU compilation only)..."
-          # This builds the bitcode files used by device helpers
           cargo build --release -p ptx
 
       - name: Build ZLUDA with Cargo
         env:
-          LIBRARY_PATH: /opt/rocm/lib
           CARGO_BUILD_JOBS: 8
         run: |
           cd zluda
-          echo "Building ZLUDA library..."
           cargo build --release -p zluda
-          # The libnvcuda.so will be a stub that loads actual ROCm device libs locally
 
       - name: Install ZLUDA artifacts
         run: |
@@ -122,7 +70,7 @@ jobs:
       - name: Upload ZLUDA artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: zluda-artifacts
+          name: d4r-zluda-artifacts
           path: |
             ~/.cache/d4r-zluda-current/
             zluda/target/release/*.so
@@ -131,7 +79,6 @@ jobs:
     if: ${{ inputs.build_all == 'all' || inputs.build_all == 'vkd3d-only' }}
     name: Build vkd3d-proton (CPU-compatible)
     runs-on: ubuntu-latest
-    needs: check-environment
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
@@ -140,15 +87,7 @@ jobs:
         run: |
           git clone https://gitlab.freedesktop.org/mesa/vkd3d-proton vkd3d-proton
           cd vkd3d-proton
-          git checkout ${{ env.VKD3D_PROTON_VERSION }}
-
-      - name: Apply vkd3d-proton patches
-        working-directory: vkd3d-proton
-        run: |
-          if [ -d "patches/vkd3d-proton" ]; then
-            git apply ../patches/vkd3d-proton/0001-*.patch 2>&1 || true
-            git apply ../patches/vkd3d-proton/0002-*.patch 2>&1 || true
-          fi
+          git checkout $VKD3D_PROTON_VERSION
 
       - name: Build vkd3d-proton
         working-directory: vkd3d-proton
@@ -171,7 +110,7 @@ jobs:
       - name: Upload vkd3d-proton artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: vkd3d-proton-artifacts
+          name: d4r-vkd3d-artifacts
           path: |
             vkd3d-shim.dll
             vkd3d-proton/vkd3d12.dll
@@ -180,7 +119,6 @@ jobs:
     if: ${{ inputs.build_all == 'all' }}
     name: Build NVngx Shim (Windows target)
     runs-on: ubuntu-latest
-    needs: check-environment
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
@@ -211,40 +149,57 @@ jobs:
           path: |
             build/d4r_nvngx.dll 2>/dev/null || true
 
-
-
   package-local-build-kit:
-    if: ${{ github.ref == 'refs/heads/main' || inputs.build_kit_only == 'true' }}
+    if: ${{ github.ref == 'refs/heads/main' || inputs.build_all != 'none' }}
     name: Package Local Build Kit
     runs-on: ubuntu-latest
-    needs: [build-zluda, build-vkd3d-proton, build-nvngx-shim, build-wine-nvcuda-bridge]
     timeout-minutes: 30
+    needs: [build-zluda, build-vkd3d-proton, build-nvngx-shim]
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download all artifacts
+      - name: Download ZLUDA artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: d4r-*
-          merge-files: true
-          path: d4r-build-kit/
+          name: d4r-zluda-artifacts
+          path: d4r-build-kit/zluda
+
+      - name: Download vkd3d-proton artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: d4r-vkd3d-artifacts
+          path: d4r-build-kit/vkd3d-proton
+
+      - name: Download shim artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: d4r-shim-artifacts
+          path: d4r-build-kit/shim 2>/dev/null || true
 
       - name: Organize build kit structure
         run: |
           echo "Building local kit structure..."
-          mkdir -p d4r-build-kit/{zluda,vkd3d-proton,shim,nvidia}
-          
-          # Copy ZLUDA artifacts
-          if [ -f ~/.cache/d4r-zluda-current/libnvcuda.so ]; then
-            cp ~/.cache/d4r-zluda-current/* d4r-build-kit/zluda/ 2>/dev/null || true
-          fi
-          
-          # Copy vkd3d-proton artifacts
-          cp -f vkd3d-shim.dll d4r-build-kit/vkd3d-proton/ 2>/dev/null || true
-          cp -f vkd3d12.dll d4r-build-kit/vkd3d-proton/ 2>/dev/null || true
-          
-          # Copy shim artifacts
-          cp -f build/d4r_nvngx.dll d4r-build-kit/shim/ 2>/dev/null || true
+          # Create README for instructions
+          cat > d4r-build-kit/README.txt << 'EOF'
+D4R Local Build Kit
+===================
+This package contains CPU-compilable components for building D4R kernels
+on your AMD ROCm system.
+
+Contents:
+- zluda/: ZLUDA library stub and PTX helpers
+- vkd3d-proton/: Vulkan-based Direct3D 12 implementation (Proton compatible)
+- shim/: Windows-target shims for integration
+
+After transferring to your ROCm PC:
+1. Copy contents to /opt/d4r/ or similar location
+2. Build ZLUDA device helper with ROCm support:
+   cd zluda && cargo build --release -p nvcuda-helper
+3. Follow docs/building.md for full installation
+
+Note: This kit only contains CPU-compilable components.
+GPU-dependent compilation (ROCm HIP helpers) must be done locally.
+EOF
 
       - name: Upload build kit package
         uses: actions/upload-artifact@v4
@@ -252,29 +207,3 @@ jobs:
           name: d4r-local-build-kit
           path: d4r-build-kit/
           if-no-files-found: skip
-
-  create-zip-package:
-    if: ${{ github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' }}
-    name: Create ZIP Package
-    runs-on: ubuntu-latest
-    needs: package-local-build-kit
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Download build kit artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: d4r-local-build-kit
-          path: ./d4r-build-kit/
-
-      - name: Create ZIP package
-        run: |
-          cd d4r-build-kit
-          zip -r ../d4r-local-build-kit.zip .
-          unzip -l ../d4r-local-build-kit.zip
-
-      - name: Upload ZIP package
-        uses: actions/upload-artifact@v4
-        with:
-          name: d4r-local-build-kit-zip
-          path: d4r-local-build-kit.zip
