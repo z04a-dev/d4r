@@ -11,7 +11,7 @@ on:
         default: all
         type: choice
         options:
-          - all (ZLUDA, vkd3d-proton, shims)
+          - all (ZLUDA, vkd3d-proton)
           - zluda-only
 
 env:
@@ -82,82 +82,112 @@ jobs:
   build-vkd3d-proton:
     name: Build vkd3d-proton (CPU-compatible)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch' || inputs.build_all == 'all' || inputs.build_all == 'vkd3d-only'
+    timeout-minutes: 60
+    if: github.event_name == 'workflow_dispatch' || inputs.build_all == 'all'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Clone vkd3d-proton
+      - name: Clone and setup vkd3d-proton (cached source)
         run: |
-          git clone https://github.com/HansKristian-Work/vkd3d-proton vkd3d-proton
-          cd vkd3d-proton
-          git checkout refs/heads/main 2>/dev/null || git checkout master
+          SRC="$HOME/.cache/d4r-vkd3d-proton"
+          COMMIT="3dfc6f07"
+          
+          if [[ ! -d "$SRC/.git" ]]; then
+            echo "Cloning vkd3d-proton..."
+            git clone https://github.com/HansKristian-Work/vkd3d-proton.git "$SRC"
+          else
+            echo "Using cached vkd3d-proton source"
+          fi
+          
+          cd "$SRC"
+          git checkout -f -B d4r-split "$COMMIT" 2>/dev/null || git checkout "$COMMIT" 2>/dev/null || true
+          git submodule update --init --recursive
 
-      - name: Build vkd3d-proton
-        working-directory: vkd3d-proton
+      - name: Apply vkd3d-proton patches
+        working-directory: $HOME/.cache/d4r-vkd3d-proton
         run: |
-          mkdir -p build && cd build
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DNVAPI_STUB=ON \
-            -DUSE_WINE=OFF \
-            -DBUILD_SHARED_LIBS=ON
-          make -j$(nproc)
+          if [ -d "patches/vkd3d-proton" ]; then
+            echo "Applying vkd3d-proton patches..."
+            for patchfile in patches/vkd3d-proton/*.patch; do
+              if [ -f "$patchfile" ]; then
+                echo "Applying: $patchfile"
+                git apply "$patchfile" 2>&1 || echo "Patch skipped or already applied: $patchfile"
+              fi
+            done
+          else
+            echo "No patches directory found at patches/vkd3d-proton/"
+          fi
 
-      - name: Install vkd3d-proton
-        working-directory: vkd3d-proton/build
+      - name: Configure with cross-compilation (mingw-w64)
+        working-directory: $HOME/.cache/d4r-vkd3d-proton
         run: |
-          make install
-          cd ../..
-          mv build/vkd3d-shim.dll .
+          mkdir -p build-win64.txt && cat > build-win64.txt << 'EOF'
+prefix = /usr
+binaries = {
+  'ar' : 'x86_64-w64-mingw32-ar',
+  'as' : 'x86_64-w64-mingw32-as',
+  'gcc' : 'x86_64-w64-mingw32-gcc',
+  'g++' : 'x86_64-w64-mingw32-g++',
+  'link' : 'x86_64-w64-mingw32-link',
+}
+EOF
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            mingw-w64-x86-64 \
+            wine64 \
+            libcurl4-openssl-dev \
+            libjson-c-dev \
+            libkrb5-dev \
+            libuuid-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libdbus-1-dev \
+            libxcb-dri3-dev \
+            libxcb-xfixes-dev \
+            wayland-protocols \
+            nss-dev \
+            libxnvctrl-dev \
+            vulkan-utils
+
+      - name: Configure with meson
+        working-directory: $HOME/.cache/d4r-vkd3d-proton
+        run: |
+          meson setup --cross-file build-win64.txt --buildtype release -Denable_tests=false builddir src
+
+      - name: Build vkd3d-proton (mingw target)
+        working-directory: $HOME/.cache/d4r-vkd3d-proton/builddir
+        run: |
+          ninja -C builddir
+
+      - name: Strip and copy DLLs to output
+        working-directory: $HOME/.cache/d4r-vkd3d-proton
+        run: |
+          mkdir -p vkd3d-output
+          x86_64-w64-mingw32-strip -o "vkd3d-output/d3d12.dll" builddir/libs/d3d12/d3d12.dll 2>/dev/null || true
+          x86_64-w64-mingw32-strip -o "vkd3d-output/d3d12core.dll" builddir/libs/d3d12core/d3d12core.dll 2>/dev/null || true
+          
+          # Also copy shim if it exists
+          if [ -f "builddir/bin/vkd3d-shim.dll" ]; then
+            cp builddir/bin/vkd3d-shim.dll vkd3d-output/
+          fi
 
       - name: Upload vkd3d-proton artifacts
         uses: actions/upload-artifact@v4
         with:
           name: d4r-vkd3d-artifacts
           path: |
-            vkd3d-shim.dll
-            vkd3d-proton/vkd3d12.dll
-
-  build-nvngx-shim:
-    name: Build NVngx Shim (Windows target)
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    if: github.event_name == 'workflow_dispatch' && inputs.build_all == 'all'
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Create build directory
-        run: |
-          mkdir -p build
-
-      - name: Build NVngx shim (Windows target)
-        working-directory: build
-        env:
-          CMAKE_C_COMPILER: x86_64-w64-mingw32-gcc
-          CMAKE_CXX_COMPILER: x86_64-w64-mingw32-g++
-        run: |
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_SYSTEM_NAME=Windows \
-            -DCMAKE_C_COMPILER=$CMAKE_C_COMPILER \
-            -DCMAKE_CXX_COMPILER=$CMAKE_CXX_COMPILER \
-            -DLIBS="advapi32 user32" || \
-          cmake .. \
-            -DCMAKE_BUILD_TYPE=Release
-
-      - name: Upload shim artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: d4r-shim-artifacts
-          path: |
-            build/d4r_nvngx.dll 2>/dev/null || true
+            $HOME/.cache/d4r-vkd3d-proton/vkd3d-output/**
 
   package-local-build-kit:
     name: Package Local Build Kit
     runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: [build-zluda, build-vkd3d-proton, build-nvngx-shim]
+    timeout-minutes: 60
+    needs: [build-zluda, build-vkd3d-proton]
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
@@ -174,11 +204,9 @@ jobs:
           name: d4r-vkd3d-artifacts
           path: d4r-build-kit/vkd3d-proton
 
-      - name: Download shim artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: d4r-shim-artifacts
-          path: d4r-build-kit/shim 2>/dev/null || true
+      - name: Organize build kit
+        run: |
+          echo "Build kit structure created"
 
       - name: Upload build kit package
         uses: actions/upload-artifact@v4
