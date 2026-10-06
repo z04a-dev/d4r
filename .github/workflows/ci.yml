@@ -5,13 +5,14 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
-      build_all:
-        description: Build all components for local kit
+      build_type:
+        description: What to build for local kit
         required: true
         default: all
         type: choice
         options:
-          - all (ZLUDA, vkd3d-proton)
+          - all (ZLUDA + d4r_emit)
+          - emit-only (d4r_emit + vkd3d-proton)
           - zluda-only
 
 jobs:
@@ -19,7 +20,7 @@ jobs:
     name: Build ZLUDA Library (CPU-compatible)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'workflow_dispatch' || inputs.build_all == 'all' || inputs.build_all == 'zluda-only'
+    if: github.event_name == 'workflow_dispatch' || inputs.build_type == 'all' || inputs.build_type == 'zluda-only'
     steps:
       - uses: actions/checkout@v4
 
@@ -48,18 +49,12 @@ jobs:
             fi
           done
 
-      - name: Build ZLUDA PTX helpers
-        env:
-          CARGO_BUILD_JOBS: 8
-        run: |
-          cd zluda
-          cargo build --release -p ptx
-
       - name: Build ZLUDA with Cargo
         env:
           CARGO_BUILD_JOBS: 8
         run: |
           cd zluda
+          cargo build --release -p ptx
           cargo build --release -p zluda
 
       - name: Install ZLUDA artifacts
@@ -68,21 +63,51 @@ jobs:
           cp zluda/target/release/libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
           ln -sf libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/libcuda.so 2>/dev/null || true
 
+      - name: Build and install d4r_emit (for offline PTX compilation)
+        run: |
+          cd zluda
+          cargo build --release -p ptx --example d4r_emit
+          cp target/release/d4r_emit /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
+
       - name: Upload ZLUDA artifacts
         uses: actions/upload-artifact@v4
         with:
           name: d4r-zluda-artifacts
           path: |
             /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/
-            zluda/target/release/*.so
 
-  build-vkd3d-proton:
-    name: Build vkd3d-proton (CPU-compatible)
+  build-emit-only:
+    name: Build d4r_emit and vkd3d-proton only (no full ZLUDA)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'workflow_dispatch' || inputs.build_all == 'all'
+    if: github.event_name == 'workflow_dispatch' || inputs.build_type == 'emit-only'
     steps:
       - uses: actions/checkout@v4
+
+      - name: Build and install d4r_emit (for offline PTX compilation)
+        run: |
+          git clone https://github.com/vosen/ZLUDA zluda
+          cd zluda
+          git checkout ee2f25a
+          
+          # Apply ZLUDA patches (needed for d4r_emit)
+          for p in 0002 0003 0004 0005 0006 0007 0008; do
+            patch_dir="patches/zluda/$p"
+            if [ -d "$patch_dir" ]; then
+              echo "Applying ZLUDA patches from $patch_dir..."
+              for file in "$patch_dir"/*.patch; do
+                if [ -f "$file" ]; then
+                  git apply "$file" 2>&1 || echo "Patch skipped (already applied)"
+                fi
+              done
+            else
+              echo "No patches directory found: $patch_dir"
+            fi
+          done
+
+          cargo build --release -p ptx --example d4r_emit
+          mkdir -p /home/runner/work/d4r/d4r/.cache/d4r-zluda-current
+          cp target/release/d4r_emit /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
 
       - name: Clone and setup vkd3d-proton (cached source)
         run: |
@@ -200,12 +225,72 @@ jobs:
           path: |
             /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/*.dll
 
-  package-local-build-kit:
-    name: Package Local Build Kit
+  build-zluda-only:
+    name: Build ZLUDA Library only (no vkd3d-proton)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [build-zluda, build-vkd3d-proton]
-    if: github.event_name == 'workflow_dispatch' || inputs.build_all == 'all'
+    if: github.event_name == 'workflow_dispatch' || inputs.build_type == 'zluda-only'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Clone ZLUDA
+        run: |
+          git clone https://github.com/vosen/ZLUDA zluda
+          cd zluda
+          git checkout ee2f25a
+          git submodule update --init --recursive
+          git lfs pull || true
+
+      - name: Apply ZLUDA patches (CPU-compatible parts)
+        working-directory: zluda
+        run: |
+          for p in 0002 0003 0004 0005 0006 0007 0008; do
+            patch_dir="patches/zluda/$p"
+            if [ -d "$patch_dir" ]; then
+              echo "Applying ZLUDA patches from $patch_dir..."
+              for file in "$patch_dir"/*.patch; do
+                if [ -f "$file" ]; then
+                  git apply "$file" 2>&1 || echo "Patch skipped (already applied)"
+                fi
+              done
+            else
+              echo "No patches directory found: $patch_dir"
+            fi
+          done
+
+      - name: Build ZLUDA with Cargo
+        env:
+          CARGO_BUILD_JOBS: 8
+        run: |
+          cd zluda
+          cargo build --release -p ptx
+          cargo build --release -p zluda
+
+      - name: Build and install d4r_emit (for offline PTX compilation)
+        run: |
+          cd zluda
+          cargo build --release -p ptx --example d4r_emit
+          cp target/release/d4r_emit /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
+
+      - name: Install ZLUDA artifacts
+        run: |
+          mkdir -p /home/runner/work/d4r/d4r/.cache/d4r-zluda-current
+          cp zluda/target/release/libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/ || true
+          ln -sf libnvcuda.so /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/libcuda.so 2>/dev/null || true
+
+      - name: Upload ZLUDA artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: d4r-zluda-artifacts
+          path: |
+            /home/runner/work/d4r/d4r/.cache/d4r-zluda-current/
+
+  package-local-build-kit-all:
+    name: Package Local Build Kit (all components)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [build-zluda, build-emit-only]
+    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'all'
     steps:
       - uses: actions/checkout@v4
 
@@ -225,6 +310,66 @@ jobs:
         run: |
           cd /home/runner/work/d4r/d4r/.cache
           zip -r ../d4r-local-build-kit.zip d4r-zluda-current/ vkd3d-proton/
+
+      - name: Upload build kit package
+        uses: actions/upload-artifact@v4
+        with:
+          name: d4r-local-build-kit.zip
+          path: |
+            .github/d4r-local-build-kit.zip
+
+  package-local-build-kit-emit-only:
+    name: Package Local Build Kit (emit + vkd3d-proton)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [build-emit-only, build-vkd3d-proton]
+    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'emit-only'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ZLUDA artifacts (d4r_emit)
+        uses: actions/download-artifact@v4
+        with:
+          name: d4r-zluda-artifacts
+          path: d4r-build-kit/zluda
+
+      - name: Download vkd3d-proton artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: d4r-vkd3d-artifacts
+          path: d4r-build-kit/vkd3d-proton
+
+      - name: Create ZIP package
+        run: |
+          cd /home/runner/work/d4r/d4r/.cache
+          zip -r ../d4r-local-build-kit.zip d4r-zluda-current/ vkd3d-proton/
+
+      - name: Upload build kit package
+        uses: actions/upload-artifact@v4
+        with:
+          name: d4r-local-build-kit.zip
+          path: |
+            .github/d4r-local-build-kit.zip
+
+  package-local-build-kit-zluda-only:
+    name: Package Local Build Kit (ZLUDA only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs: [build-zluda-only]
+    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'zluda-only'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download ZLUDA artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: d4r-zluda-artifacts
+          path: d4r-build-kit/zluda
+
+      - name: Create ZIP package
+        run: |
+          cd /home/runner/work/d4r/d4r/.cache
+          zip -r ../d4r-local-build-kit.zip d4r-zluda-current/
 
       - name: Upload build kit package
         uses: actions/upload-artifact@v4
