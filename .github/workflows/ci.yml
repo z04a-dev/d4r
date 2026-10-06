@@ -22,7 +22,7 @@ jobs:
   build-emit-only:
     name: Build d4r_emit only (fast, for 'emit-only' mode)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
 
@@ -73,7 +73,7 @@ jobs:
   build-vkd3d-proton-emit-only:
     name: Build vkd3d-proton (for 'emit-only' mode)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 360
     steps:
       - uses: actions/checkout@v4
 
@@ -204,7 +204,7 @@ jobs:
   package-local-build-kit-emit-only:
     name: Package Local Build Kit (emit + vkd3d-proton only)
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 360
     needs: [build-emit-only, build-vkd3d-proton-emit-only]
     steps:
       - uses: actions/checkout@v4
