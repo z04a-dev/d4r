@@ -102,8 +102,8 @@ jobs:
 
       - name: Apply vkd3d-proton patches
         run: |
-          cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton
           PATCH_DIR="/home/runner/work/d4r/d4r/patches/vkd3d-proton"
+          cd "$SRC"
           if [ -d "$PATCH_DIR" ]; then
             echo "Applying vkd3d-proton patches..."
             for patchfile in "$PATCH_DIR"/*.patch; do
@@ -116,29 +116,11 @@ jobs:
             echo "No patches directory found at $PATCH_DIR/"
           fi
 
-      - name: Configure cross-compilation toolchain
-        run: |
-          VKD3D_CONFIG="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/build-win64.txt"
-          printf '[binaries]\n' > "$VKD3D_CONFIG"
-          printf '  c = '"'"'x86_64-w64-mingw32-gcc'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  cpp = '"'"'x86_64-w64-mingw32-g++'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  ar = '"'"'x86_64-w64-mingw32-ar'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  strip = '"'"'x86_64-w64-mingw32-strip'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '[properties]\n' >> "$VKD3D_CONFIG"
-          printf '  needs_exe_wrapper = true\n' >> "$VKD3D_CONFIG"
-          printf '[host_machine]\n' >> "$VKD3D_CONFIG"
-          printf '  system = '"'"'windows'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  cpu_family = '"'"'x86_64'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  cpu = '"'"'x86_64'"'"'\n' >> "$VKD3D_CONFIG"
-          printf '  endian = '"'"'little'"'"'\n' >> "$VKD3D_CONFIG"
-
-      - name: Install mingw-w64 and dependencies
+      - name: Install build dependencies
         run: |
           sudo apt-get update
-          
           sudo apt-get install -y \
             mingw-w64 \
-            wine64 \
             meson \
             ninja-build \
             libcurl4-openssl-dev \
@@ -157,32 +139,44 @@ jobs:
             wayland-protocols \
             libvulkan-dev \
             libffi-dev \
-            pkg-config || true
+            pkg-config
+
+      - name: Configure cross-compilation toolchain
+        run: |
+          VKD3D_CONFIG="/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/build-win64.txt"
+          printf '[binaries]\n' > "$VKD3D_CONFIG"
+          printf '  c = '"'"'x86_64-w64-mingw32-gcc'"'"'\n' >> "$VKD3D_CONFIG"
+          printf '  cpp = '"'"'x86_64-w64-mingw32-g++'"'"'\n' >> "$VKD3D_CONFIG"
+          printf '  ar = '"'"'x86_64-w64-mingw32-ar'"'"'\n' >> "$VKD3D_CONFIG"
+          printf '  strip = '"'"'x86_64-w64-mingw32-strip'"'"'\n' >> "$VKD3D_CONFIG"
+          printf '[properties]\n' >> "$VKD3D_CONFIG"
+          printf '  needs_exe_wrapper = true\n' >> "$VKD3D_CONFIG"
+          printf '[host_machine]\n' >> "$VKD3D_CONFIG"
+          printf '  system = '"'"'windows'"'"'\n' >> "$VKD3D_CONFIG"
+          printf '  cpu_family = '"'"'x86_64'"'"'\n' >> "$VKD3D_CONFIG"
+          printf '  cpu = '"'"'x86_64'"'"'\n' >> "$VKD3D_CONFIG"
+          printf '  endian = '"'"'little'"'"'\n' >> "$VKD3D_CONFIG"
 
       - name: Configure with meson
         run: |
           cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton
-          meson setup builddir . --cross-file build-win64.txt --buildtype release -Denable_tests=false
+          meson setup builddir . --cross-file "$VKD3D_CONFIG" --buildtype release -Denable_tests=false
 
       - name: Build vkd3d-proton (mingw target)
         run: |
           cd /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/builddir
-          ninja
+          ninja -j"$(nproc)"
 
-      - name: Strip and copy DLLs to output
+      - name: Copy DLLs to output
         run: |
           mkdir -p /home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output
           
           if [ -f "builddir/libs/d3d12/d3d12.dll" ]; then
-            x86_64-w64-mingw32-strip -o "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/d3d12.dll" builddir/libs/d3d12/d3d12.dll 2>/dev/null || true
+            cp builddir/libs/d3d12/d3d12.dll "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/"
           fi
           
           if [ -f "builddir/libs/d3d12core/d3d12core.dll" ]; then
-            x86_64-w64-mingw32-strip -o "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/d3d12core.dll" builddir/libs/d3d12core/d3d12core.dll 2>/dev/null || true
-          fi
-          
-          if [ -f "builddir/bin/vkd3d-shim.dll" ]; then
-            cp builddir/bin/vkd3d-shim.dll "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/"
+            cp builddir/libs/d3d12core/d3d12core.dll "/home/runner/work/d4r/d4r/.cache/d4r-vkd3d-proton/vkd3d-output/"
           fi
 
       - name: Upload vkd3d-proton artifacts
@@ -197,7 +191,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [build-zluda, build-vkd3d-proton]
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || inputs.build_all == 'all'
     steps:
       - uses: actions/checkout@v4
 
@@ -213,9 +207,14 @@ jobs:
           name: d4r-vkd3d-artifacts
           path: d4r-build-kit/vkd3d-proton
 
+      - name: Create ZIP package
+        run: |
+          cd /home/runner/work/d4r/d4r/.cache
+          zip -r ../d4r-local-build-kit.zip d4r-zluda-current/
+
       - name: Upload build kit package
         uses: actions/upload-artifact@v4
         with:
-          name: d4r-local-build-kit
-          path: d4r-build-kit/
-          if-no-files-found: skip
+          name: d4r-local-build-kit.zip
+          path: |
+            .github/d4r-local-build-kit.zip
