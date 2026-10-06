@@ -106,16 +106,17 @@ jobs:
       - name: Apply vkd3d-proton patches
         working-directory: $HOME/.cache/d4r-vkd3d-proton
         run: |
-          if [ -d "patches/vkd3d-proton" ]; then
+          # Patches are in repo root, go up to find them
+          if [ -d "../patches/vkd3d-proton" ]; then
             echo "Applying vkd3d-proton patches..."
-            for patchfile in patches/vkd3d-proton/*.patch; do
+            for patchfile in ../patches/vkd3d-proton/*.patch; do
               if [ -f "$patchfile" ]; then
                 echo "Applying: $patchfile"
                 git apply "$patchfile" 2>&1 || echo "Patch skipped or already applied: $patchfile"
               fi
             done
           else
-            echo "No patches directory found at patches/vkd3d-proton/"
+            echo "No patches directory found at ../patches/vkd3d-proton/"
           fi
 
       - name: Configure cross-compilation toolchain
