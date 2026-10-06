@@ -1,8 +1,6 @@
 name: Kernel CI
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       build_type:
@@ -14,16 +12,18 @@ on:
           - all (ZLUDA + d4r_emit + vkd3d-proton)
           - emit-only (d4r_emit + vkd3d-proton, no full ZLUDA)
 
+env:
+  BUILD_TYPE: ${{ github.event.inputs.build_type }}
+
 jobs:
   # =============================================================================
   # JOB: build-zluda-full
-  # Description: Builds full ZLUDA (only for 'all' mode)
+  # Description: Builds full ZLUDA with libnvcuda.so (only for 'all' mode)
   # =============================================================================
   build-zluda-full:
     name: Build full ZLUDA (for 'all' mode only)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'all'
     steps:
       - uses: actions/checkout@v4
 
@@ -83,7 +83,6 @@ jobs:
     name: Build d4r_emit only (fast, for 'emit-only' mode)
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'emit-only'
     steps:
       - uses: actions/checkout@v4
 
@@ -140,7 +139,6 @@ jobs:
     name: Build vkd3d-proton (for 'all' mode)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'all'
     steps:
       - uses: actions/checkout@v4
 
@@ -268,7 +266,6 @@ jobs:
     name: Build vkd3d-proton (for 'emit-only' mode)
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'emit-only'
     steps:
       - uses: actions/checkout@v4
 
@@ -398,7 +395,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [build-zluda-full, build-vkd3d-proton-all]
-    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'all'
     steps:
       - uses: actions/checkout@v4
 
@@ -436,7 +432,6 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     needs: [build-emit-only, build-vkd3d-proton-emit-only]
-    if: github.event_name == 'workflow_dispatch' && inputs.build_type == 'emit-only'
     steps:
       - uses: actions/checkout@v4
 
