@@ -46,9 +46,10 @@ jobs:
             cmake ninja-build pkg-config libgl1-mesa-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-action@v2
+        uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+          target: x86_64-pc-windows-gnu
 
       - name: Check for NVIDIA files (for later packaging)
         id: check_nvidia
